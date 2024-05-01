@@ -1,57 +1,42 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-#define LED_PIN 3 // Använd pinne 3 för LED
-#define LED_DDR DDRD // Använd port D för LED
-#define LED_PORT PORTD // Använd port D för LED
+#define LED_PIN_PORT PORTD  // PORTD definieras för att styra utgången av digitala stiften
+#define LED_PIN_DDR  DDRD   // Data direction register används för att sätta stiftet som utgång
+#define LED_PIN_NUMBER PIND3  // PIND3 motsvarar digitalt pin 3
 
-volatile bool ledState = false; // Variabel för att hålla reda på LED-status
+volatile bool ledState = false;
 
-void setupTimer() {
-  // Konfigurera timer1
-  TCCR1B |= (1 << WGM12); // CTC mode
-  TIMSK1 |= (1 << OCIE1A); // Tillåt compare A-interrupt
-  
-  // Räkna ut värdet för att uppnå en periodtid på 200 ms
-  // F_CPU = 16 MHz
-  // Prescaler = 1024
-  // Önskad periodtid = 200 ms = 0.2 s
-  // Timer räknar upp med (F_CPU / Prescaler)
-  // Antal ticks för att uppnå 200 ms = (0.2 s * (F_CPU / Prescaler)) - 1
-  // Antal ticks = (0.2 * (16000000 / 1024)) - 1 = 312.5
-  // Avrunda till närmaste heltal, får 312
-  OCR1A = 312; // Sätt compare-värdet för att generera compare A-interrupt var 200 ms
-  
-  // Aktivera timer med prescaler 1024
-  TCCR1B |= (1 << CS12) | (1 << CS10);
+// Timer1 overflow interrupt service routine (ISR)
+ISR(TIMER1_OVF_vect) {
+    TCNT1 = 312; // Återställ timerpreload
+    // Växla LED-läge
+    ledState = !ledState;
 }
 
-// ISR för compare A-interrupt
-ISR(TIMER1_COMPA_vect) {
-  // Toggla LED-status
-  ledState = !ledState;
-  
-  // Uppdatera LED baserat på nya statusen
-  if (ledState) {
-    LED_PORT |= (1 << LED_PIN); // Tänd LED
-  } else {
-    LED_PORT &= ~(1 << LED_PIN); // Släck LED
-  }
+void initTimer1() {
+    TCCR1A = 0; // Initiera kontrollregistret A för Timer1
+    TCCR1B = 0; // Initiera kontrollregistret B för Timer1
+    TCCR1B |= (1 << CS11) | (1 << CS10); // Ange prescaler till 64
+    TCNT1 = 31249; // Ladda förval Timer1 med värdet för en 200 ms period
+    TIMSK1 |= (1 << TOIE1); // Aktivera Timer1 overflow interrupt
 }
 
-int main() {
-  // Sätt LED-pinne som output
-  LED_DDR |= (1 << LED_PIN);
-  
-  // Aktivera globala interrupts
-  sei();
-  
-  // Konfigurera timer
-  setupTimer();
-  
-  while (1) {
-    // Huvudprogrammet körs automatiskt av ISR (interrupt service routine)
-  }
-  
-  return 0;
+void initLED() {
+    LED_PIN_DDR |= (1 << LED_PIN_NUMBER); // Sätt LED pin som utgång
+}
+
+void setup() {
+    initTimer1(); // Initiera Timer1
+    initLED(); // Initiera LED
+    sei(); // Aktivera globala interrupts
+}
+
+// Funktion för att uppdatera LED-läge i main loopen
+void startUpLed() {
+    if (ledState) {
+        LED_PIN_PORT |= (1 << LED_PIN_NUMBER); // Slå på LED
+    } else {
+        LED_PIN_PORT &= ~(1 << LED_PIN_NUMBER); // Slå av LED
+    }
 }
